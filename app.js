@@ -72,6 +72,21 @@
     const BLUE_LINE_WIDTH = 2;
     const GREEN_LINE_WIDTH = 2;
 
+    // Mouse position for on-canvas tooltip
+    let mouseCanvasX = -1;
+    let mouseCanvasY = -1;
+    let renderPending = false;
+
+    function requestRender() {
+        if (!renderPending) {
+            renderPending = true;
+            requestAnimationFrame(() => {
+                renderPending = false;
+                render();
+            });
+        }
+    }
+
     // ── Coordinate transforms ──
     function imgToCanvas(ix, iy) {
         return [ix * state.scale + state.offsetX, iy * state.scale + state.offsetY];
@@ -82,9 +97,9 @@
     }
 
     // ── Teeth computation ──
-    // gauge = perforations per 20mm → spacing = 20mm / gauge
-    // spacing in px = (20 / gauge) * px_per_mm
-    // From first perforation corner to last, compute how many teeth fit.
+    // gauge = perforations per 20mm → spacing_mm = 20 / gauge
+    // spacing_px = spacing_mm * px_per_mm
+    // Teeth are evenly distributed from p1 to p2 with count based on the gauge.
     function computeTeethForSide(side) {
         const d = state.data;
         const pxMm = d.px_per_mm;
@@ -114,26 +129,31 @@
         const edgeLen = Math.sqrt(dx * dx + dy * dy);
         const spacingPx = (20 / gauge) * pxMm;
 
-        // Blue box boundaries for constraint
-        const blueMinX = Math.min(dc['top-left'][0], dc['bottom-left'][0]);
-        const blueMaxX = Math.max(dc['top-right'][0], dc['bottom-right'][0]);
-        const blueMinY = Math.min(dc['top-left'][1], dc['top-right'][1]);
-        const blueMaxY = Math.max(dc['bottom-left'][1], dc['bottom-right'][1]);
+        // Blue box boundaries for constraint — use bounding box of the 4 design corners
+        const blueXs = [dc['top-left'][0], dc['top-right'][0], dc['bottom-left'][0], dc['bottom-right'][0]];
+        const blueYs = [dc['top-left'][1], dc['top-right'][1], dc['bottom-left'][1], dc['bottom-right'][1]];
+        const blueMinX = Math.min(...blueXs);
+        const blueMaxX = Math.max(...blueXs);
+        const blueMinY = Math.min(...blueYs);
+        const blueMaxY = Math.max(...blueYs);
 
-        const count = Math.floor(edgeLen / spacingPx) + 1;
-        const ux = count > 1 ? dx / (count - 1) : 0;
-        const uy = count > 1 ? dy / (count - 1) : 0;
+        const numGaps = Math.max(1, Math.round(edgeLen / spacingPx));
+        const count = numGaps + 1;
+        const ux = dx / numGaps;
+        const uy = dy / numGaps;
 
         const teeth = [];
         for (let i = 0; i < count; i++) {
             const tx = p1[0] + ux * i;
             const ty = p1[1] + uy * i;
-            if (tx >= blueMinX - 1 && tx <= blueMaxX + 1 && ty >= blueMinY - 1 && ty <= blueMaxY + 1) {
+            const tolerance = 2;
+            if (tx >= blueMinX - tolerance && tx <= blueMaxX + tolerance &&
+                ty >= blueMinY - tolerance && ty <= blueMaxY + tolerance) {
                 teeth.push([tx, ty]);
             }
         }
 
-        return { teeth, p1, p2, spacingPx, count };
+        return { teeth, p1, p2, spacingPx, count, actualSpacing: edgeLen / numGaps };
     }
 
     // ── Handles (draggable points) ──
@@ -203,58 +223,69 @@
         ctx.fillStyle = 'rgba(74, 144, 217, 0.06)';
         ctx.fill();
 
-        // ── Green perforation path + teeth ──
+        // ── Green perforation perimeter + teeth ──
         const pc = state.data.perforation_corners;
-
-        // The green path goes: top-left → top-right → right-top → right-bottom → bottom-right → bottom-left → left-bottom → left-top → top-left
-        const greenOrder = ['top-left', 'top-right', 'right-top', 'right-bottom', 'bottom-right', 'bottom-left', 'left-bottom', 'left-top'];
-        const greenPoints = greenOrder.map(k => pc[k]);
-
-        // Draw green closed path
-        ctx.beginPath();
-        [cx, cy] = imgToCanvas(greenPoints[0][0], greenPoints[0][1]);
-        ctx.moveTo(cx, cy);
-        for (let i = 1; i < greenPoints.length; i++) {
-            [cx, cy] = imgToCanvas(greenPoints[i][0], greenPoints[i][1]);
-            ctx.lineTo(cx, cy);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = 'rgba(62, 201, 122, 0.5)';
-        ctx.lineWidth = GREEN_LINE_WIDTH;
-        ctx.setLineDash([6, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Draw teeth for each side
         const sides = ['top', 'right', 'bottom', 'left'];
+
+        // Compute teeth for each side
+        const teethBySide = {};
         for (const side of sides) {
-            const { teeth } = computeTeethForSide(side);
+            teethBySide[side] = computeTeethForSide(side);
+        }
+
+        // Build complete green perimeter path going through all teeth:
+        // top (left→right) → corner link → right (top→bottom) → corner link → bottom (right→left) → corner link → left (bottom→top) → close
+        const perimeterPoints = [];
+        // Top side teeth
+        perimeterPoints.push(...teethBySide.top.teeth);
+        // Corner: top-right perf → right-top perf (small gap link)
+        perimeterPoints.push(pc['top-right'], pc['right-top']);
+        // Right side teeth
+        perimeterPoints.push(...teethBySide.right.teeth);
+        // Corner: right-bottom perf → bottom-right perf
+        perimeterPoints.push(pc['right-bottom'], pc['bottom-right']);
+        // Bottom side teeth (reversed – right to left)
+        perimeterPoints.push(...[...teethBySide.bottom.teeth].reverse());
+        // Corner: bottom-left perf → left-bottom perf
+        perimeterPoints.push(pc['bottom-left'], pc['left-bottom']);
+        // Left side teeth (reversed – bottom to top)
+        perimeterPoints.push(...[...teethBySide.left.teeth].reverse());
+        // Corner: left-top perf → top-left perf (close)
+        perimeterPoints.push(pc['left-top'], pc['top-left']);
+
+        // Draw green closed perimeter through all teeth
+        if (perimeterPoints.length > 1) {
+            ctx.beginPath();
+            let [px, py] = imgToCanvas(perimeterPoints[0][0], perimeterPoints[0][1]);
+            ctx.moveTo(px, py);
+            for (let i = 1; i < perimeterPoints.length; i++) {
+                [px, py] = imgToCanvas(perimeterPoints[i][0], perimeterPoints[i][1]);
+                ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(62, 201, 122, 0.45)';
+            ctx.lineWidth = GREEN_LINE_WIDTH;
+            ctx.setLineDash([]);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(62, 201, 122, 0.03)';
+            ctx.fill();
+        }
+
+        // Draw tooth markers on top
+        const toothR = Math.max(2, Math.min(6, TOOTH_RADIUS_PX * Math.sqrt(state.scale)));
+        for (const side of sides) {
+            const { teeth } = teethBySide[side];
             for (const [tx, ty] of teeth) {
                 const [scx, scy] = imgToCanvas(tx, ty);
                 ctx.beginPath();
-                ctx.arc(scx, scy, TOOTH_RADIUS_PX, 0, Math.PI * 2);
+                ctx.arc(scx, scy, toothR, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(62, 201, 122, 0.85)';
                 ctx.fill();
                 ctx.strokeStyle = '#2aa662';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
-        }
-
-        // Also draw the green connecting line through the teeth
-        for (const side of sides) {
-            const { teeth } = computeTeethForSide(side);
-            if (teeth.length < 2) continue;
-            ctx.beginPath();
-            let [sx, sy] = imgToCanvas(teeth[0][0], teeth[0][1]);
-            ctx.moveTo(sx, sy);
-            for (let i = 1; i < teeth.length; i++) {
-                [sx, sy] = imgToCanvas(teeth[i][0], teeth[i][1]);
-                ctx.lineTo(sx, sy);
-            }
-            ctx.strokeStyle = 'rgba(62, 201, 122, 0.4)';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
         }
 
         // ── Draw handles ──
@@ -265,6 +296,17 @@
             const isDragging = state.dragging && state.dragging.type === h.type && state.dragging.key === h.key;
             const r = (isHovered || isDragging) ? HANDLE_RADIUS + 2 : HANDLE_RADIUS;
 
+            // Glow ring
+            if (isHovered || isDragging) {
+                ctx.beginPath();
+                ctx.arc(hx, hy, r + 5, 0, Math.PI * 2);
+                ctx.fillStyle = h.color + '22';
+                ctx.fill();
+                ctx.strokeStyle = h.color + '66';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
             ctx.beginPath();
             ctx.arc(hx, hy, r, 0, Math.PI * 2);
             ctx.fillStyle = isDragging ? '#fff' : h.color;
@@ -273,12 +315,60 @@
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
+            // Label on hover
             if (isHovered || isDragging) {
+                const label = `${h.key} (${Math.round(h.x)}, ${Math.round(h.y)})`;
+                ctx.font = '600 11px Inter, sans-serif';
+                const tm = ctx.measureText(label);
+                const lx = hx + r + 8;
+                const ly = hy - r - 4;
+                const pad = 4;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.75)';
                 ctx.beginPath();
-                ctx.arc(hx, hy, r + 4, 0, Math.PI * 2);
-                ctx.strokeStyle = h.color + '66';
-                ctx.lineWidth = 2;
+                ctx.roundRect(lx - pad, ly - 12 - pad, tm.width + pad * 2, 16 + pad, 4);
+                ctx.fill();
+
+                ctx.fillStyle = '#fff';
+                ctx.fillText(label, lx, ly);
+            }
+        }
+
+        // ── On-canvas crosshair + coordinate tooltip ──
+        if (mouseCanvasX >= 0 && mouseCanvasY >= 0) {
+            const [mImgX, mImgY] = canvasToImg(mouseCanvasX, mouseCanvasY);
+            const onImage = mImgX >= 0 && mImgX <= state.imageW && mImgY >= 0 && mImgY <= state.imageH;
+
+            // Crosshair lines
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(mouseCanvasX, 0);
+            ctx.lineTo(mouseCanvasX, H);
+            ctx.moveTo(0, mouseCanvasY);
+            ctx.lineTo(W, mouseCanvasY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            if (onImage) {
+                const txt = `${Math.round(mImgX)}, ${Math.round(mImgY)}`;
+                ctx.font = '500 11px "JetBrains Mono", monospace';
+                const tw = ctx.measureText(txt).width;
+                const tx = mouseCanvasX + 14;
+                const ty = mouseCanvasY - 14;
+                const pad = 5;
+
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.beginPath();
+                ctx.roundRect(tx - pad, ty - 11 - pad, tw + pad * 2, 15 + pad * 2, 4);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
                 ctx.stroke();
+
+                ctx.fillStyle = '#e4e6f0';
+                ctx.fillText(txt, tx, ty + 2);
             }
         }
 
@@ -452,7 +542,10 @@
         const my = e.clientY - rect.top;
         const [imgX, imgY] = canvasToImg(mx, my);
 
-        // Update coordinates display
+        mouseCanvasX = mx;
+        mouseCanvasY = my;
+
+        // Update coordinates display in header
         canvasCoordsEl.textContent = `x: ${Math.round(mx)}  y: ${Math.round(my)}`;
         if (state.image && imgX >= 0 && imgX <= state.imageW && imgY >= 0 && imgY <= state.imageH) {
             imgCoordsEl.textContent = `x: ${Math.round(imgX)}  y: ${Math.round(imgY)}`;
@@ -476,7 +569,7 @@
             }
 
             syncInputsFromState();
-            render();
+            requestRender();
             return;
         }
 
@@ -484,7 +577,7 @@
             state.offsetX = state.panStart.ox + (mx - state.panStart.x);
             state.offsetY = state.panStart.oy + (my - state.panStart.y);
             imgScaleEl.textContent = (state.scale * 100).toFixed(1) + '%';
-            render();
+            requestRender();
             return;
         }
 
@@ -493,8 +586,9 @@
         if (handle !== state.hoveredHandle) {
             state.hoveredHandle = handle;
             canvas.style.cursor = handle ? 'grab' : 'crosshair';
-            render();
         }
+
+        requestRender();
     });
 
     canvas.addEventListener('mouseup', () => {
@@ -506,6 +600,8 @@
         state.dragging = null;
         state.isPanning = false;
         state.hoveredHandle = null;
+        mouseCanvasX = -1;
+        mouseCanvasY = -1;
         imgCoordsEl.textContent = 'x: —  y: —';
         canvasCoordsEl.textContent = 'x: —  y: —';
         render();
@@ -563,6 +659,24 @@
         a.click();
         URL.revokeObjectURL(url);
     });
+
+    // ── roundRect polyfill for older browsers ──
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            if (typeof r === 'number') r = [r, r, r, r];
+            const [tl, tr, br, bl] = r;
+            this.moveTo(x + tl, y);
+            this.lineTo(x + w - tr, y);
+            this.quadraticCurveTo(x + w, y, x + w, y + tr);
+            this.lineTo(x + w, y + h - br);
+            this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+            this.lineTo(x + bl, y + h);
+            this.quadraticCurveTo(x, y + h, x, y + h - bl);
+            this.lineTo(x, y + tl);
+            this.quadraticCurveTo(x, y, x + tl, y);
+            this.closePath();
+        };
+    }
 
     // ── Init ──
     window.addEventListener('resize', resizeCanvas);
