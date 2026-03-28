@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stamp Perforation Editor</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f0f1a;--surface:#1a1a2e;--surface2:#242444;--border:#333366;
+  --text:#e0e0f0;--text2:#8888aa;--blue:#4488ff;--green:#00e676;
+  --green2:#00c853;--accent:#6c63ff;--danger:#ff5252;--handle:#ffab40;
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0;z-index:10}
+header h1{font-size:18px;font-weight:600;color:var(--accent);white-space:nowrap}
+#coords-bar{display:flex;gap:20px;align-items:center;font-size:13px;font-family:'Courier New',monospace}
+#coords-bar .coord{background:var(--surface2);padding:4px 12px;border-radius:6px;border:1px solid var(--border);min-width:120px;text-align:center}
+#coords-bar .coord span{color:var(--green)}
+.main{display:flex;flex:1;overflow:hidden}
+#canvas-wrap{flex:1;position:relative;overflow:hidden;background:#0a0a14}
+canvas{display:block;cursor:crosshair}
+#drop-zone{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(15,15,26,.92);z-index:5;transition:opacity .3s}
+#drop-zone.hidden{opacity:0;pointer-events:none}
+#drop-zone.dragover{background:rgba(108,99,255,.15);border:3px dashed var(--accent)}
+.drop-icon{font-size:64px;margin-bottom:16px;opacity:.5}
+#drop-zone p{font-size:16px;color:var(--text2);margin-bottom:12px}
+#drop-zone label{background:var(--accent);color:#fff;padding:10px 28px;border-radius:8px;cursor:pointer;font-weight:600;transition:transform .15s,box-shadow .15s}
+#drop-zone label:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(108,99,255,.4)}
+#drop-zone input{display:none}
+aside{width:320px;background:var(--surface);border-left:1px solid var(--border);overflow-y:auto;flex-shrink:0;padding:16px;display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px}
+.panel h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.panel h3 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.field{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px}
+.field:last-child{margin-bottom:0}
+.field label{color:var(--text2);min-width:70px}
+.field input[type=number]{width:80px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:13px;text-align:right;font-family:inherit}
+.field input[type=number]:focus{outline:none;border-color:var(--accent)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+.legend-item .swatch{width:14px;height:14px;border-radius:3px}
+#json-output{width:100%;min-height:200px;background:var(--bg);border:1px solid var(--border);color:var(--green);padding:10px;border-radius:8px;font-family:'Courier New',monospace;font-size:11px;resize:vertical}
+.btn{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-accent:hover{box-shadow:0 2px 12px rgba(108,99,255,.4)}
+.btn-green{background:var(--green2);color:#000}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+.info-row{font-size:12px;color:var(--text2);margin-top:6px}
+.info-row span{color:var(--text)}
+.tooltip{position:absolute;background:rgba(0,0,0,.85);color:#fff;font-size:12px;padding:4px 10px;border-radius:6px;pointer-events:none;white-space:nowrap;font-family:'Courier New',monospace;z-index:20}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Stamp Perforation Editor</h1>
+  <div id="coords-bar">
+    <div class="coord">X: <span id="mx">-</span></div>
+    <div class="coord">Y: <span id="my">-</span></div>
+    <div class="coord">Zoom: <span id="mz">100%</span></div>
+  </div>
+</header>
+
+<div class="main">
+  <div id="canvas-wrap">
+    <canvas id="c"></canvas>
+    <div id="drop-zone">
+      <div class="drop-icon">&#128750;</div>
+      <p>Drop a stamp image here or click to upload</p>
+      <label for="file-input">Choose Image</label>
+      <input type="file" id="file-input" accept="image/*">
+    </div>
+    <div class="tooltip" id="tooltip" style="display:none"></div>
+  </div>
+
+  <aside>
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--blue)"></span> Design Corners (Blue Box)</h3>
+      <div class="field"><label>Top-Left</label><input type="number" id="dc-tl-x" step="1"> , <input type="number" id="dc-tl-y" step="1"></div>
+      <div class="field"><label>Top-Right</label><input type="number" id="dc-tr-x" step="1"> , <input type="number" id="dc-tr-y" step="1"></div>
+      <div class="field"><label>Bot-Left</label><input type="number" id="dc-bl-x" step="1"> , <input type="number" id="dc-bl-y" step="1"></div>
+      <div class="field"><label>Bot-Right</label><input type="number" id="dc-br-x" step="1"> , <input type="number" id="dc-br-y" step="1"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--green)"></span> Perforation Gauge</h3>
+      <div class="field"><label>Top</label><input type="number" id="perf-top" step="0.01" min="0"></div>
+      <div class="field"><label>Bottom</label><input type="number" id="perf-bottom" step="0.01" min="0"></div>
+      <div class="field"><label>Left</label><input type="number" id="perf-left" step="0.01" min="0"></div>
+      <div class="field"><label>Right</label><input type="number" id="perf-right" step="0.01" min="0"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--handle)"></span> Scale</h3>
+      <div class="field"><label>px/mm</label><input type="number" id="px-per-mm" step="0.001" min="0"></div>
+      <div class="info-row">Tooth spacing = <span id="spacing-info">-</span></div>
+    </div>
+
+    <div class="panel">
+      <h3><span class="dot" style="background:var(--green)"></span> Perforation Corners</h3>
+      <div class="field"><label>Top-L</label><input type="number" id="pc-tl-x" step="1">,<input type="number" id="pc-tl-y" step="1"></div>
+      <div class="field"><label>Top-R</label><input type="number" id="pc-tr-x" step="1">,<input type="number" id="pc-tr-y" step="1"></div>
+      <div class="field"><label>Bot-L</label><input type="number" id="pc-bl-x" step="1">,<input type="number" id="pc-bl-y" step="1"></div>
+      <div class="field"><label>Bot-R</label><input type="number" id="pc-br-x" step="1">,<input type="number" id="pc-br-y" step="1"></div>
+      <div class="field"><label>Left-T</label><input type="number" id="pc-lt-x" step="1">,<input type="number" id="pc-lt-y" step="1"></div>
+      <div class="field"><label>Left-B</label><input type="number" id="pc-lb-x" step="1">,<input type="number" id="pc-lb-y" step="1"></div>
+      <div class="field"><label>Right-T</label><input type="number" id="pc-rt-x" step="1">,<input type="number" id="pc-rt-y" step="1"></div>
+      <div class="field"><label>Right-B</label><input type="number" id="pc-rb-x" step="1">,<input type="number" id="pc-rb-y" step="1"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Legend</h3>
+      <div class="legend">
+        <div class="legend-item"><div class="swatch" style="background:var(--blue)"></div>Design Box</div>
+        <div class="legend-item"><div class="swatch" style="background:var(--green)"></div>Perf Line</div>
+        <div class="legend-item"><div class="swatch" style="background:var(--handle)"></div>Drag Handle</div>
+        <div class="legend-item"><div class="swatch" style="background:#ff4081"></div>Teeth</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>JSON Data</h3>
+      <textarea id="json-output" readonly></textarea>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-accent" onclick="copyJSON()">Copy JSON</button>
+        <button class="btn btn-green" onclick="loadJSON()">Load JSON</button>
+        <button class="btn btn-danger" onclick="resetDefaults()">Reset</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const DEFAULTS = {
+  design_corners: {
+    "top-left": [197, 190], "top-right": [1840, 172],
+    "bottom-left": [203, 1237], "bottom-right": [1862, 1236]
+  },
+  perforation_corners: {
+    "top-left": [180, 123], "top-right": [1839, 113],
+    "bottom-left": [181, 1247], "bottom-right": [1848, 1239],
+    "left-top": [122, 160], "left-bottom": [122, 1220],
+    "right-top": [1906, 214], "right-bottom": [1914, 1246]
+  },
+  perforations: { top: 13.21, bottom: 13.14, left: 12.92, right: 13.27 },
+  px_per_mm: 45.642
+};
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvas-wrap');
+const dropZone = document.getElementById('drop-zone');
+const tooltip = document.getElementById('tooltip');
+
+let img = null;
+let state = {
+  dc: JSON.parse(JSON.stringify(DEFAULTS.design_corners)),
+  pc: JSON.parse(JSON.stringify(DEFAULTS.perforation_corners)),
+  perf: { ...DEFAULTS.perforations },
+  pxmm: DEFAULTS.px_per_mm,
+  zoom: 1, panX: 0, panY: 0,
+  teeth: { top: [], bottom: [], left: [], right: [] }
+};
+
+let drag = null;
+let hoveredHandle = null;
+let isPanning = false;
+let panStart = { x: 0, y: 0 };
+
+function deep(o) { return JSON.parse(JSON.stringify(o)); }
+
+/* ---- coordinate helpers ---- */
+function imgToCanvas(ix, iy) {
+  return [ix * state.zoom + state.panX, iy * state.zoom + state.panY];
+}
+function canvasToImg(cx, cy) {
+  return [(cx - state.panX) / state.zoom, (cy - state.panY) / state.zoom];
+}
+
+/* ---- teeth calculation ---- */
+function calcTeethForSide(start, end, gauge, pxmm, blueBounds) {
+  const dx = end[0] - start[0], dy = end[1] - start[1];
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 1 || gauge <= 0 || pxmm <= 0) return [start, end];
+
+  const spacingPx = (20 / gauge) * pxmm;
+  const numTeeth = Math.max(2, Math.round(dist / spacingPx) + 1);
+
+  const pts = [];
+  for (let i = 0; i < numTeeth; i++) {
+    const t = i / (numTeeth - 1);
+    let px = start[0] + t * dx;
+    let py = start[1] + t * dy;
+    pts.push([px, py]);
+  }
+
+  if (blueBounds) {
+    return pts.filter(p =>
+      p[0] >= blueBounds.minX - 5 && p[0] <= blueBounds.maxX + 5 &&
+      p[1] >= blueBounds.minY - 5 && p[1] <= blueBounds.maxY + 5
+    );
+  }
+  return pts;
+}
+
+function calcAllTeeth() {
+  const dc = state.dc;
+  const bb = {
+    minX: Math.min(dc["top-left"][0], dc["bottom-left"][0]),
+    maxX: Math.max(dc["top-right"][0], dc["bottom-right"][0]),
+    minY: Math.min(dc["top-left"][1], dc["top-right"][1]),
+    maxY: Math.max(dc["bottom-left"][1], dc["bottom-right"][1])
+  };
+
+  const pc = state.pc, p = state.perf, pm = state.pxmm;
+  state.teeth.top = calcTeethForSide(pc["top-left"], pc["top-right"], p.top, pm, bb);
+  state.teeth.bottom = calcTeethForSide(pc["bottom-left"], pc["bottom-right"], p.bottom, pm, bb);
+  state.teeth.left = calcTeethForSide(pc["left-top"], pc["left-bottom"], p.left, pm, bb);
+  state.teeth.right = calcTeethForSide(pc["right-top"], pc["right-bottom"], p.right, pm, bb);
+}
+
+/* ---- handles list ---- */
+function getHandles() {
+  const h = [];
+  const dcKeys = ["top-left", "top-right", "bottom-left", "bottom-right"];
+  dcKeys.forEach(k => h.push({ type: 'dc', key: k, pos: state.dc[k] }));
+
+  const pcKeys = ["top-left", "top-right", "bottom-left", "bottom-right",
+                   "left-top", "left-bottom", "right-top", "right-bottom"];
+  pcKeys.forEach(k => h.push({ type: 'pc', key: k, pos: state.pc[k] }));
+  return h;
+}
+
+function findHandle(cx, cy, threshold) {
+  const [ix, iy] = canvasToImg(cx, cy);
+  const r = threshold / state.zoom;
+  let best = null, bestD = Infinity;
+  for (const h of getHandles()) {
+    const d = Math.hypot(h.pos[0] - ix, h.pos[1] - iy);
+    if (d < r && d < bestD) { bestD = d; best = h; }
+  }
+  return best;
+}
+
+/* ---- rendering ---- */
+function resize() {
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+
+function fitImage() {
+  if (!img) return;
+  const pad = 40;
+  const sx = (canvas.width - pad * 2) / img.width;
+  const sy = (canvas.height - pad * 2) / img.height;
+  state.zoom = Math.min(sx, sy);
+  state.panX = (canvas.width - img.width * state.zoom) / 2;
+  state.panY = (canvas.height - img.height * state.zoom) / 2;
+}
+
+function render() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0, 0, w, h);
+
+  if (!img) return;
+
+  ctx.save();
+  ctx.translate(state.panX, state.panY);
+  ctx.scale(state.zoom, state.zoom);
+
+  ctx.drawImage(img, 0, 0);
+
+  drawBlueBox();
+  calcAllTeeth();
+  drawTeeth();
+  drawHandles();
+
+  ctx.restore();
+  updateJSON();
+  updateSpacingInfo();
+}
+
+function drawBlueBox() {
+  const dc = state.dc;
+  ctx.beginPath();
+  ctx.moveTo(dc["top-left"][0], dc["top-left"][1]);
+  ctx.lineTo(dc["top-right"][0], dc["top-right"][1]);
+  ctx.lineTo(dc["bottom-right"][0], dc["bottom-right"][1]);
+  ctx.lineTo(dc["bottom-left"][0], dc["bottom-left"][1]);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(68,136,255,0.9)';
+  ctx.lineWidth = 2.5 / state.zoom;
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(68,136,255,0.06)';
+  ctx.fill();
+}
+
+function drawTeethSide(pts, side) {
+  if (pts.length < 2) return;
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) {
+    ctx.lineTo(pts[i][0], pts[i][1]);
+  }
+  ctx.strokeStyle = 'rgba(0,230,118,0.8)';
+  ctx.lineWidth = 1.8 / state.zoom;
+  ctx.stroke();
+
+  const r = 5 / state.zoom;
+  const cornerR = 7 / state.zoom;
+
+  for (let i = 0; i < pts.length; i++) {
+    const isCorner = i === 0 || i === pts.length - 1;
+    ctx.beginPath();
+    ctx.arc(pts[i][0], pts[i][1], isCorner ? cornerR : r, 0, Math.PI * 2);
+
+    if (isCorner) {
+      ctx.fillStyle = 'rgba(0,230,118,0.9)';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5 / state.zoom;
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = 'rgba(255,64,129,0.85)';
+      ctx.strokeStyle = 'rgba(255,64,129,0.4)';
+      ctx.lineWidth = 1 / state.zoom;
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  const mid = pts[Math.floor(pts.length / 2)];
+  ctx.font = `${12 / state.zoom}px 'Segoe UI', sans-serif`;
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.textAlign = 'center';
+  const label = `${side}: ${pts.length} teeth`;
+  const offsets = { top: [0, -18], bottom: [0, 22], left: [-10, 0], right: [10, 0] };
+  const off = offsets[side] || [0, -18];
+  ctx.fillText(label, mid[0] + off[0] / state.zoom, mid[1] + off[1] / state.zoom);
+}
+
+function drawTeeth() {
+  drawTeethSide(state.teeth.top, 'top');
+  drawTeethSide(state.teeth.bottom, 'bottom');
+  drawTeethSide(state.teeth.left, 'left');
+  drawTeethSide(state.teeth.right, 'right');
+}
+
+function drawHandles() {
+  const handles = getHandles();
+  for (const h of handles) {
+    const r = (h === hoveredHandle || (drag && drag.key === h.key && drag.type === h.type)) ? 9 : 6;
+    const sr = r / state.zoom;
+    ctx.beginPath();
+    ctx.arc(h.pos[0], h.pos[1], sr, 0, Math.PI * 2);
+
+    if (h.type === 'dc') {
+      ctx.fillStyle = 'rgba(68,136,255,0.9)';
+      ctx.strokeStyle = '#fff';
+    } else {
+      ctx.fillStyle = 'rgba(255,171,64,0.9)';
+      ctx.strokeStyle = '#fff';
+    }
+    ctx.lineWidth = 2 / state.zoom;
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+/* ---- input sync ---- */
+function syncInputsFromState() {
+  const dc = state.dc, pc = state.pc;
+  document.getElementById('dc-tl-x').value = Math.round(dc["top-left"][0]);
+  document.getElementById('dc-tl-y').value = Math.round(dc["top-left"][1]);
+  document.getElementById('dc-tr-x').value = Math.round(dc["top-right"][0]);
+  document.getElementById('dc-tr-y').value = Math.round(dc["top-right"][1]);
+  document.getElementById('dc-bl-x').value = Math.round(dc["bottom-left"][0]);
+  document.getElementById('dc-bl-y').value = Math.round(dc["bottom-left"][1]);
+  document.getElementById('dc-br-x').value = Math.round(dc["bottom-right"][0]);
+  document.getElementById('dc-br-y').value = Math.round(dc["bottom-right"][1]);
+
+  document.getElementById('pc-tl-x').value = Math.round(pc["top-left"][0]);
+  document.getElementById('pc-tl-y').value = Math.round(pc["top-left"][1]);
+  document.getElementById('pc-tr-x').value = Math.round(pc["top-right"][0]);
+  document.getElementById('pc-tr-y').value = Math.round(pc["top-right"][1]);
+  document.getElementById('pc-bl-x').value = Math.round(pc["bottom-left"][0]);
+  document.getElementById('pc-bl-y').value = Math.round(pc["bottom-left"][1]);
+  document.getElementById('pc-br-x').value = Math.round(pc["bottom-right"][0]);
+  document.getElementById('pc-br-y').value = Math.round(pc["bottom-right"][1]);
+  document.getElementById('pc-lt-x').value = Math.round(pc["left-top"][0]);
+  document.getElementById('pc-lt-y').value = Math.round(pc["left-top"][1]);
+  document.getElementById('pc-lb-x').value = Math.round(pc["left-bottom"][0]);
+  document.getElementById('pc-lb-y').value = Math.round(pc["left-bottom"][1]);
+  document.getElementById('pc-rt-x').value = Math.round(pc["right-top"][0]);
+  document.getElementById('pc-rt-y').value = Math.round(pc["right-top"][1]);
+  document.getElementById('pc-rb-x').value = Math.round(pc["right-bottom"][0]);
+  document.getElementById('pc-rb-y').value = Math.round(pc["right-bottom"][1]);
+
+  document.getElementById('perf-top').value = state.perf.top;
+  document.getElementById('perf-bottom').value = state.perf.bottom;
+  document.getElementById('perf-left').value = state.perf.left;
+  document.getElementById('perf-right').value = state.perf.right;
+  document.getElementById('px-per-mm').value = state.pxmm;
+}
+
+function readInputsToState() {
+  state.dc["top-left"] = [+document.getElementById('dc-tl-x').value, +document.getElementById('dc-tl-y').value];
+  state.dc["top-right"] = [+document.getElementById('dc-tr-x').value, +document.getElementById('dc-tr-y').value];
+  state.dc["bottom-left"] = [+document.getElementById('dc-bl-x').value, +document.getElementById('dc-bl-y').value];
+  state.dc["bottom-right"] = [+document.getElementById('dc-br-x').value, +document.getElementById('dc-br-y').value];
+
+  state.pc["top-left"] = [+document.getElementById('pc-tl-x').value, +document.getElementById('pc-tl-y').value];
+  state.pc["top-right"] = [+document.getElementById('pc-tr-x').value, +document.getElementById('pc-tr-y').value];
+  state.pc["bottom-left"] = [+document.getElementById('pc-bl-x').value, +document.getElementById('pc-bl-y').value];
+  state.pc["bottom-right"] = [+document.getElementById('pc-br-x').value, +document.getElementById('pc-br-y').value];
+  state.pc["left-top"] = [+document.getElementById('pc-lt-x').value, +document.getElementById('pc-lt-y').value];
+  state.pc["left-bottom"] = [+document.getElementById('pc-lb-x').value, +document.getElementById('pc-lb-y').value];
+  state.pc["right-top"] = [+document.getElementById('pc-rt-x').value, +document.getElementById('pc-rt-y').value];
+  state.pc["right-bottom"] = [+document.getElementById('pc-rb-x').value, +document.getElementById('pc-rb-y').value];
+
+  state.perf.top = +document.getElementById('perf-top').value;
+  state.perf.bottom = +document.getElementById('perf-bottom').value;
+  state.perf.left = +document.getElementById('perf-left').value;
+  state.perf.right = +document.getElementById('perf-right').value;
+  state.pxmm = +document.getElementById('px-per-mm').value;
+  render();
+}
+
+function updateJSON() {
+  const out = {
+    design_corners: deep(state.dc),
+    perforation_corners: deep(state.pc),
+    perforations: { ...state.perf },
+    px_per_mm: state.pxmm,
+    teeth_count: {
+      top: state.teeth.top.length,
+      bottom: state.teeth.bottom.length,
+      left: state.teeth.left.length,
+      right: state.teeth.right.length
+    }
+  };
+  document.getElementById('json-output').value = JSON.stringify(out, null, 2);
+}
+
+function updateSpacingInfo() {
+  const avg = (state.perf.top + state.perf.bottom + state.perf.left + state.perf.right) / 4;
+  const spacingMm = 20 / avg;
+  const spacingPx = spacingMm * state.pxmm;
+  document.getElementById('spacing-info').textContent =
+    `~${spacingMm.toFixed(3)}mm = ~${spacingPx.toFixed(1)}px`;
+}
+
+/* ---- events ---- */
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return [e.clientX - rect.left, e.clientY - rect.top];
+}
+
+canvas.addEventListener('mousedown', e => {
+  const [cx, cy] = getMousePos(e);
+
+  if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    isPanning = true;
+    panStart = { x: cx - state.panX, y: cy - state.panY };
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
+
+  const h = findHandle(cx, cy, 18);
+  if (h) {
+    drag = h;
+    canvas.style.cursor = 'move';
+  } else if (e.button === 0) {
+    isPanning = true;
+    panStart = { x: cx - state.panX, y: cy - state.panY };
+    canvas.style.cursor = 'grabbing';
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  const [cx, cy] = getMousePos(e);
+  const [ix, iy] = canvasToImg(cx, cy);
+
+  document.getElementById('mx').textContent = Math.round(ix);
+  document.getElementById('my').textContent = Math.round(iy);
+
+  if (isPanning) {
+    state.panX = cx - panStart.x;
+    state.panY = cy - panStart.y;
+    render();
+    return;
+  }
+
+  if (drag) {
+    if (drag.type === 'dc') {
+      state.dc[drag.key] = [Math.round(ix), Math.round(iy)];
+    } else {
+      state.pc[drag.key] = [Math.round(ix), Math.round(iy)];
+    }
+    syncInputsFromState();
+    render();
+    showTooltip(e.clientX, e.clientY, drag);
+    return;
+  }
+
+  const h = findHandle(cx, cy, 18);
+  hoveredHandle = h;
+  canvas.style.cursor = h ? 'move' : 'crosshair';
+
+  if (h) {
+    showTooltip(e.clientX, e.clientY, h);
+  } else {
+    tooltip.style.display = 'none';
+  }
+  render();
+});
+
+canvas.addEventListener('mouseup', () => {
+  drag = null;
+  isPanning = false;
+  canvas.style.cursor = 'crosshair';
+});
+
+canvas.addEventListener('mouseleave', () => {
+  drag = null;
+  isPanning = false;
+  hoveredHandle = null;
+  tooltip.style.display = 'none';
+  canvas.style.cursor = 'crosshair';
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const [cx, cy] = getMousePos(e);
+  const [ix, iy] = canvasToImg(cx, cy);
+
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  state.zoom = Math.max(0.05, Math.min(20, state.zoom * factor));
+
+  state.panX = cx - ix * state.zoom;
+  state.panY = cy - iy * state.zoom;
+
+  document.getElementById('mz').textContent = Math.round(state.zoom * 100) + '%';
+  render();
+}, { passive: false });
+
+function showTooltip(mx, my, h) {
+  const label = h.type === 'dc' ? `Design ${h.key}` : `Perf ${h.key}`;
+  tooltip.textContent = `${label}: (${Math.round(h.pos[0])}, ${Math.round(h.pos[1])})`;
+  tooltip.style.display = 'block';
+  tooltip.style.left = (mx + 14) + 'px';
+  tooltip.style.top = (my - 30) + 'px';
+}
+
+/* ---- file handling ---- */
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const i = new Image();
+    i.onload = () => {
+      img = i;
+      dropZone.classList.add('hidden');
+      fitImage();
+      render();
+    };
+    i.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadImage(e.target.files[0]);
+});
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
+});
+
+/* ---- sidebar input listeners ---- */
+document.querySelectorAll('aside input[type=number]').forEach(inp => {
+  inp.addEventListener('input', readInputsToState);
+});
+
+/* ---- actions ---- */
+function copyJSON() {
+  const ta = document.getElementById('json-output');
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const btn = document.querySelector('.btn-accent');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy JSON', 1500);
+  });
+}
+
+function loadJSON() {
+  const val = prompt('Paste JSON data:');
+  if (!val) return;
+  try {
+    const d = JSON.parse(val);
+    if (d.design_corners) state.dc = deep(d.design_corners);
+    if (d.perforation_corners) state.pc = deep(d.perforation_corners);
+    if (d.perforations) state.perf = { ...d.perforations };
+    if (d.px_per_mm) state.pxmm = d.px_per_mm;
+    syncInputsFromState();
+    render();
+  } catch (e) { alert('Invalid JSON: ' + e.message); }
+}
+
+function resetDefaults() {
+  state.dc = deep(DEFAULTS.design_corners);
+  state.pc = deep(DEFAULTS.perforation_corners);
+  state.perf = { ...DEFAULTS.perforations };
+  state.pxmm = DEFAULTS.px_per_mm;
+  syncInputsFromState();
+  render();
+}
+
+/* ---- init ---- */
+window.addEventListener('resize', () => { resize(); render(); });
+resize();
+syncInputsFromState();
+render();
+</script>
+</body>
+</html>
