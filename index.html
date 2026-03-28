@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stamp Perforation Editor</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <header id="top-bar">
+            <div class="top-left">
+                <h1>Stamp Perforation Editor</h1>
+            </div>
+            <div class="top-right">
+                <div id="coords-display">
+                    <span class="coord-label">Image</span>
+                    <span id="img-coords" class="coord-value">x: — y: —</span>
+                    <span class="coord-sep">|</span>
+                    <span class="coord-label">Canvas</span>
+                    <span id="canvas-coords" class="coord-value">x: — y: —</span>
+                </div>
+            </div>
+        </header>
+
+        <main id="workspace">
+            <div id="canvas-wrapper">
+                <div id="upload-overlay">
+                    <div class="upload-content">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <p>Drop an image here or click to upload</p>
+                        <span class="upload-hint">Supports JPG, PNG, TIFF</span>
+                    </div>
+                    <input type="file" id="file-input" accept="image/*">
+                </div>
+                <canvas id="editor-canvas"></canvas>
+            </div>
+
+            <aside id="sidebar">
+                <section class="panel">
+                    <div class="panel-header">
+                        <h3>Image</h3>
+                    </div>
+                    <div class="panel-body">
+                        <button id="upload-btn" class="btn btn-primary">Upload Image</button>
+                        <div id="image-info" class="info-grid hidden">
+                            <span class="info-label">Size</span>
+                            <span id="img-size" class="info-value">—</span>
+                            <span class="info-label">Scale</span>
+                            <span id="img-scale" class="info-value">—</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header" data-toggle="design-section">
+                        <h3>Design Corners <span class="badge blue">Blue Box</span></h3>
+                        <span class="toggle-icon">&#9660;</span>
+                    </div>
+                    <div class="panel-body" id="design-section">
+                        <div class="corner-grid">
+                            <div class="corner-item">
+                                <label>Top-Left</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="dc-tl-x" data-key="design_corners.top-left.0" value="197">
+                                    <input type="number" id="dc-tl-y" data-key="design_corners.top-left.1" value="190">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Top-Right</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="dc-tr-x" data-key="design_corners.top-right.0" value="1840">
+                                    <input type="number" id="dc-tr-y" data-key="design_corners.top-right.1" value="172">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Bottom-Left</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="dc-bl-x" data-key="design_corners.bottom-left.0" value="203">
+                                    <input type="number" id="dc-bl-y" data-key="design_corners.bottom-left.1" value="1237">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Bottom-Right</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="dc-br-x" data-key="design_corners.bottom-right.0" value="1862">
+                                    <input type="number" id="dc-br-y" data-key="design_corners.bottom-right.1" value="1236">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header" data-toggle="perf-corners-section">
+                        <h3>Perforation Corners <span class="badge green">Green Line</span></h3>
+                        <span class="toggle-icon">&#9660;</span>
+                    </div>
+                    <div class="panel-body" id="perf-corners-section">
+                        <div class="corner-grid compact">
+                            <div class="corner-item">
+                                <label>Top-Left</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-tl-x" data-key="perforation_corners.top-left.0" value="180">
+                                    <input type="number" id="pc-tl-y" data-key="perforation_corners.top-left.1" value="123">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Top-Right</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-tr-x" data-key="perforation_corners.top-right.0" value="1839">
+                                    <input type="number" id="pc-tr-y" data-key="perforation_corners.top-right.1" value="113">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Right-Top</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-rt-x" data-key="perforation_corners.right-top.0" value="1906">
+                                    <input type="number" id="pc-rt-y" data-key="perforation_corners.right-top.1" value="214">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Right-Bottom</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-rb-x" data-key="perforation_corners.right-bottom.0" value="1914">
+                                    <input type="number" id="pc-rb-y" data-key="perforation_corners.right-bottom.1" value="1246">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Bottom-Right</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-br-x" data-key="perforation_corners.bottom-right.0" value="1848">
+                                    <input type="number" id="pc-br-y" data-key="perforation_corners.bottom-right.1" value="1239">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Bottom-Left</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-bl-x" data-key="perforation_corners.bottom-left.0" value="181">
+                                    <input type="number" id="pc-bl-y" data-key="perforation_corners.bottom-left.1" value="1247">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Left-Bottom</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-lb-x" data-key="perforation_corners.left-bottom.0" value="122">
+                                    <input type="number" id="pc-lb-y" data-key="perforation_corners.left-bottom.1" value="1220">
+                                </div>
+                            </div>
+                            <div class="corner-item">
+                                <label>Left-Top</label>
+                                <div class="coord-inputs">
+                                    <input type="number" id="pc-lt-x" data-key="perforation_corners.left-top.0" value="122">
+                                    <input type="number" id="pc-lt-y" data-key="perforation_corners.left-top.1" value="160">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header" data-toggle="gauge-section">
+                        <h3>Perforation Gauge</h3>
+                        <span class="toggle-icon">&#9660;</span>
+                    </div>
+                    <div class="panel-body" id="gauge-section">
+                        <p class="hint">Perforations per 2cm</p>
+                        <div class="gauge-grid">
+                            <div class="gauge-item">
+                                <label>Top</label>
+                                <input type="number" step="0.01" id="gauge-top" data-key="perforations.top" value="13.21">
+                            </div>
+                            <div class="gauge-item">
+                                <label>Right</label>
+                                <input type="number" step="0.01" id="gauge-right" data-key="perforations.right" value="13.27">
+                            </div>
+                            <div class="gauge-item">
+                                <label>Bottom</label>
+                                <input type="number" step="0.01" id="gauge-bottom" data-key="perforations.bottom" value="13.14">
+                            </div>
+                            <div class="gauge-item">
+                                <label>Left</label>
+                                <input type="number" step="0.01" id="gauge-left" data-key="perforations.left" value="12.92">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header" data-toggle="scale-section">
+                        <h3>Scale</h3>
+                        <span class="toggle-icon">&#9660;</span>
+                    </div>
+                    <div class="panel-body" id="scale-section">
+                        <div class="scale-row">
+                            <label>px / mm</label>
+                            <input type="number" step="0.001" id="px-per-mm" data-key="px_per_mm" value="45.642">
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header" data-toggle="teeth-info-section">
+                        <h3>Teeth Count</h3>
+                        <span class="toggle-icon">&#9660;</span>
+                    </div>
+                    <div class="panel-body" id="teeth-info-section">
+                        <div class="info-grid">
+                            <span class="info-label">Top</span>
+                            <span id="teeth-top" class="info-value">—</span>
+                            <span class="info-label">Right</span>
+                            <span id="teeth-right" class="info-value">—</span>
+                            <span class="info-label">Bottom</span>
+                            <span id="teeth-bottom" class="info-value">—</span>
+                            <span class="info-label">Left</span>
+                            <span id="teeth-left" class="info-value">—</span>
+                            <span class="info-label">Total</span>
+                            <span id="teeth-total" class="info-value">—</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <div class="panel-header">
+                        <h3>Export</h3>
+                    </div>
+                    <div class="panel-body">
+                        <button id="export-json-btn" class="btn btn-secondary">Export JSON</button>
+                    </div>
+                </section>
+            </aside>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
