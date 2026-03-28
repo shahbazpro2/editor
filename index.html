@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Corner & Perforation Editor</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <section class="controls">
+        <h1>Image Perforation Editor</h1>
+
+        <label class="label" for="imageUpload">Upload Image</label>
+        <input id="imageUpload" type="file" accept="image/*" />
+
+        <label class="label" for="configInput">Config JSON</label>
+        <textarea id="configInput" rows="16"></textarea>
+        <div class="button-row">
+          <button id="applyConfigBtn" type="button">Apply Config</button>
+          <button id="resetConfigBtn" type="button">Reset Default</button>
+        </div>
+
+        <h2>Green Guide Line</h2>
+        <label class="label" for="sideSelect">Side</label>
+        <select id="sideSelect">
+          <option value="top">Top</option>
+          <option value="right">Right</option>
+          <option value="bottom">Bottom</option>
+          <option value="left">Left</option>
+        </select>
+
+        <label class="label" for="offsetRange">Offset</label>
+        <input id="offsetRange" type="range" min="0" max="100" step="1" value="0" />
+        <div id="offsetValue" class="value-text">0 px</div>
+
+        <label class="label" for="lengthRange">Length</label>
+        <input id="lengthRange" type="range" min="20" max="100" step="1" value="100" />
+        <div id="lengthValue" class="value-text">100 px</div>
+
+        <p class="hint">
+          Tip: Green line handles drag kar ke bhi resize kar sakte hain. Teeth count line
+          length ke sath auto update hota hai.
+        </p>
+
+        <div class="stats">
+          <h3>Computed Teeth</h3>
+          <ul id="teethStats"></ul>
+        </div>
+      </section>
+
+      <section class="canvas-panel">
+        <div class="canvas-wrap">
+          <canvas id="editorCanvas" width="1200" height="800"></canvas>
+        </div>
+        <div class="status-bar">
+          <span id="mouseXY">x: -, y: -</span>
+          <span id="statusText">Load an image to start.</span>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>

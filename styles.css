@@ -1,0 +1,152 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.controls,
+.canvas-panel {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.08);
+}
+
+.controls {
+  padding: 16px;
+  overflow: auto;
+}
+
+.controls h1 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+.controls h2 {
+  margin: 16px 0 8px;
+  font-size: 16px;
+}
+
+.label {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+input[type="file"],
+select,
+textarea,
+button {
+  width: 100%;
+  font: inherit;
+}
+
+textarea {
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  padding: 8px;
+  resize: vertical;
+  min-height: 220px;
+}
+
+select,
+input[type="range"] {
+  margin-bottom: 4px;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  background: #175cd3;
+  color: #fff;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #1849a9;
+}
+
+.value-text {
+  font-size: 13px;
+  color: #475467;
+  margin-bottom: 8px;
+}
+
+.hint {
+  margin: 10px 0;
+  font-size: 12px;
+  color: #667085;
+}
+
+.stats {
+  margin-top: 10px;
+  border-top: 1px solid #eaecf0;
+  padding-top: 10px;
+}
+
+.stats h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.stats ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.stats li {
+  margin-bottom: 4px;
+}
+
+.canvas-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #111827;
+  display: grid;
+  place-items: center;
+}
+
+canvas {
+  background: #0b1220;
+  max-width: 100%;
+  height: auto;
+}
+
+.status-bar {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #344054;
+  padding: 0 2px;
+}
